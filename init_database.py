@@ -16,10 +16,10 @@ def init_database(database_path, main_logger):
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS live_broadcast (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_name TEXT UNIQUE,
-                twitch_broadcast_id TEXT UNIQUE,
+                user_id TEXT,
+                user_name TEXT,
+                stream_id TEXT,
                 recording_start TEXT,
-                timestamp TEXT DEFAULT (datetime('now', 'localtime')),
                 title TEXT
             )
         ''')

@@ -58,21 +58,30 @@ def current_datetime_to_utc_iso():
     return now.strftime("%Y-%m-%dT%H:%M:%SZ")  # Форматирование с "Z" для обозначения UTC
 
 
-def add_record_to_db(user_name, stream_id, recording_start, title):
+def add_record_to_db(stream_data, recording_start):
     try:
+        user_id=stream_data['user_id']
+        user_name=stream_data['user_name']
+        stream_id=stream_data['id']
+        recording_start=recording_start
+        title=stream_data['title']
+
         conn = sqlite3.connect(config.database_path)
         cursor = conn.cursor()
 
         cursor.execute('''
             INSERT INTO live_broadcast (
+                user_id,
                 user_name,
-                twitch_broadcast_id,
-                created_at,
+                stream_id,
+                recording_start,
                 title
             )
-            VALUES (?, ?, ?, ?)
-            ''', (user_name, stream_id, recording_start, title)
+            VALUES (?, ?, ?, ?, ?)
+            ''', (user_id, user_name, stream_id, recording_start, title)
         )
+
+        conn.commit()
     except Exception as err:
         logger.error(f"Ошибка при добавлении записи: {err}")
     finally:
@@ -80,16 +89,35 @@ def add_record_to_db(user_name, stream_id, recording_start, title):
         conn.close()
 
 
-def record_twitch_channel(active_users, active_pbars, user_name, stream_id, stream_data, recorded_file_path):
+def record_twitch_channel(active_users, active_pbars, stream_data, storages):
     try:
+        user_name=stream_data['user_name']
+        stream_id=stream_data['id']
+
+        recording_start = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
+        name_components = [recording_start, 'broadcast', user_name]
+
+        recorded_file_path = get_file_path(
+            storages=storages,
+            user_name=user_name,
+            name_components=name_components,
+            logger=logger
+        )
+
         active_users.add(user_name)
+
         logger.info(f"Запись стрима пользователя [ {user_name} - {stream_id} ] началась.")
+
+        add_record_to_db(
+            stream_data=stream_data,
+            recording_start=recording_start
+        )
 
         record_broadcast(recorded_file_path, user_name, active_pbars)
 
         logger.info(f"Запись стрима пользователя [ {user_name} - {stream_id} ] закончилась.")
 
-        add_record_to_db(user_name, stream_id, stream_data['started_at'], stream_data['title'])
+
     except Exception as err:
         logger.error(f"Ошибка при записи трансляции канала {user_name}: {err}")
     finally:
@@ -180,22 +208,14 @@ def loop_check_with_rate_limit(client_id, client_secret, storages, user_names):
                 if stream_data is None:
                     continue
 
-                file_path = get_file_path(
-                    storages=storages,
-                    stream_id=stream_data['id'],
-                    user_name=user_name,
-                    logger=logger
-                )
                 recording_thread_name = f"process_recorded_broadcasts_thread_{user_name}"
                 recording_thread = threading.Thread(
                     target=record_twitch_channel,
                     args=(
                         active_users,
                         active_pbars,
-                        user_name,
-                        stream_data['id'],
                         stream_data,
-                        file_path
+                        storages
                     ),
                     name=recording_thread_name,
                     daemon=True

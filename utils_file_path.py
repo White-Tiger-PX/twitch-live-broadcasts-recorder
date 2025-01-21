@@ -1,5 +1,4 @@
 import os
-from datetime import datetime
 
 from choose_storage import choose_storage
 
@@ -31,15 +30,7 @@ def create_file_path(folder_path, name_components, extension, logger):
         raise
 
 
-def get_file_path(storages, stream_id, user_name, logger):
-    file_path = None
-
-    date = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
-
-    name_components = [date, 'broadcast', user_name]
-
-    name_components.insert(1, stream_id)
-
+def get_file_path(storages, user_name, name_components, logger):
     storage_path = choose_storage(storages=storages, logger=logger)
     folder_path = os.path.join(storage_path, user_name)
 
