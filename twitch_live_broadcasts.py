@@ -15,11 +15,8 @@ from init_database import init_database
 from utils_file_path import get_file_path
 from record_broadcast import record_broadcast
 from fetch_access_token import fetch_access_token
+from get_twitch_user_id import get_twitch_user_id
 
-
-
-class CustomError(Exception):
-    pass
 
 class TwitchResponseStatus(enum.Enum):
     ONLINE = 0
@@ -73,7 +70,6 @@ class StreamRecorderApp:
             del self.active_records[user_name]
 
 
-
 class RateLimiter:
     def __init__(self, max_requests, period):
         self.max_requests = max_requests
@@ -97,23 +93,17 @@ class RateLimiter:
                     time.sleep(sleep_time)
 
             # Добавляем текущий запрос в список
-            self.requests.append(time.time())  # Используем обновлённое текущее время для точности
+            self.requests.append(time.time())
 
 
 def current_datetime_to_utc_iso():
     now = datetime.now() + timedelta(hours=config.utc_offset_hours)
 
-    return now.strftime("%Y-%m-%dT%H:%M:%SZ")  # Форматирование с "Z" для обозначения UTC
+    return now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def add_record_to_db(stream_data, recording_start):
     try:
-        user_id=stream_data['user_id']
-        user_name=stream_data['user_name']
-        stream_id=stream_data['id']
-        recording_start=recording_start
-        title=stream_data['title']
-
         conn = sqlite3.connect(config.database_path)
         cursor = conn.cursor()
 
@@ -126,8 +116,13 @@ def add_record_to_db(stream_data, recording_start):
                 title
             )
             VALUES (?, ?, ?, ?, ?)
-            ''', (user_id, user_name, stream_id, recording_start, title)
-        )
+        ''', (
+            stream_data['user_id'],
+            stream_data['user_name'],
+            stream_data['id'],
+            recording_start,
+            stream_data['title']
+        ))
 
         conn.commit()
     except Exception as err:
@@ -139,10 +134,11 @@ def add_record_to_db(stream_data, recording_start):
 
 def record_twitch_channel(active_users, stream_data, storages, app):
     try:
-        user_name=stream_data['user_name']
-        stream_id=stream_data['id']
+        user_name = stream_data['user_name']
+        user_id = stream_data['user_id']
+        stream_id = stream_data['id']
 
-        active_users.add(user_name.lower())
+        active_users.add(user_id)
 
         recording_start = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
         name_components = [recording_start, 'broadcast', user_name]
@@ -168,17 +164,17 @@ def record_twitch_channel(active_users, stream_data, storages, app):
         logger.error(f"Ошибка при записи трансляции канала {user_name}: {err}")
     finally:
         time.sleep(5)
-        active_users.discard(user_name.lower())
+        active_users.discard(user_id)
 
 
-def check_user(user_name, client_id, access_token):
+def check_user(user_id, client_id, access_token):
     info = None
     status = TwitchResponseStatus.ERROR
     url = "https://api.twitch.tv/helix/streams"
 
     try:
         headers = {"Client-ID": client_id, "Authorization": "Bearer " + access_token}
-        r = requests.get(url + "?user_login=" + user_name, headers=headers, timeout=15)
+        r = requests.get(url + "?user_id=" + user_id, headers=headers, timeout=15)
         r.raise_for_status()
         info = r.json()
 
@@ -191,18 +187,17 @@ def check_user(user_name, client_id, access_token):
     except requests.exceptions.RequestException as e:
         if e.response:
             if e.response.status_code == 401:
-                # Ошибка авторизации — токен устарел, нужно обновить
                 status = TwitchResponseStatus.UNAUTHORIZED
             elif e.response.status_code == 404:
                 status = TwitchResponseStatus.NOT_FOUND
 
     if status == TwitchResponseStatus.NOT_FOUND:
-        logger.info(f"1. {user_name}\n2. {status}\n3. {info}")
+        logger.info(f"1. {user_id}\n2. {status}\n3. {info}")
     elif status == TwitchResponseStatus.ERROR:
         if info is not None:
-            logger.info(f"1. {user_name}\n2. {status}\n3. {info}")
+            logger.info(f"1. {user_id}\n2. {status}\n3. {info}")
     elif status == TwitchResponseStatus.UNAUTHORIZED:
-        logger.warning(f"Токен устарел для {user_name}, обновляем...")
+        logger.warning(f"Токен устарел для {user_id}, обновляем...")
 
         access_token = fetch_access_token(
             client_id=client_id,
@@ -213,7 +208,32 @@ def check_user(user_name, client_id, access_token):
     return None
 
 
-def loop_check_with_rate_limit(client_id, client_secret, storages, user_names, app):
+def get_twitch_user_ids(user_identifiers, client_id, access_token):
+    headers = {"Client-ID": client_id, "Authorization": f"Bearer {access_token}"}
+
+    user_ids = set()
+
+    for user_identifier in user_identifiers:
+        if isinstance(user_identifier, int):
+            user_ids.add(str(user_identifier))
+        elif user_identifier.isdigit():
+            user_ids.add(str(user_identifier))
+        else:
+            user_id = get_twitch_user_id(
+                database_path=config.database_path,
+                user_name=user_identifier,
+                headers=headers,
+                main_logger=logger
+            )
+
+            if user_id:
+                user_ids.add(user_id)
+
+    return list(user_ids)
+
+
+
+def loop_check_with_rate_limit(client_id, client_secret, storages, user_identifiers, app):
     active_users = set()
 
     access_token = fetch_access_token(
@@ -222,22 +242,24 @@ def loop_check_with_rate_limit(client_id, client_secret, storages, user_names, a
         logger=logger
     )
 
+    user_ids = get_twitch_user_ids(user_identifiers, client_id, access_token)
+
     while True:
         try:
-            user_names_for_check = [
-                user_name.lower() for user_name
-                in user_names
-                if user_name not in active_users
+            user_ids_for_check = [
+                user_id for user_id
+                in user_ids
+                if user_id not in active_users
             ]
 
-            for user_name in user_names_for_check:
+            for user_id in user_ids_for_check:
                 limiter.wait()
-                stream_data = check_user(user_name, client_id, access_token)
+                stream_data = check_user(user_id, client_id, access_token)
 
                 if stream_data is None:
                     continue
 
-                recording_thread_name = f"process_recorded_broadcasts_thread_{user_name}"
+                recording_thread_name = f"process_recorded_broadcasts_thread_{user_id}"
                 recording_thread = threading.Thread(
                     target=record_twitch_channel,
                     args=(
@@ -263,7 +285,6 @@ def main():
     root = tk.Tk()
     app = StreamRecorderApp(root)
 
-    # Запускаем поток для обновления времени
     threading.Thread(target=app.update_duration, daemon=True).start()
 
     logger.info("Программа для записи трансляций запущена!")
@@ -275,7 +296,7 @@ def main():
 
     client_id = config.client_id
     client_secret = config.client_secret
-    usernames = config.user_names
+    usernames = config.user_identifiers
     storages = config.storages
 
     threading.Thread(

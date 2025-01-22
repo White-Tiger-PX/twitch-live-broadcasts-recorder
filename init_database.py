@@ -24,6 +24,14 @@ def init_database(database_path, main_logger):
             )
         ''')
 
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS twitch_user_name_to_id_mapping (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_name TEXT UNIQUE,
+                user_id TEXT
+            )
+        ''')
+
         conn.commit()
         logger.info("Инициализация базы данных завершена.")
     except Exception as err:
