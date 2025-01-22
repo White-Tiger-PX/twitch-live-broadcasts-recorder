@@ -3,7 +3,9 @@ import enum
 import sqlite3
 import requests
 import threading
+import tkinter as tk
 
+from tkinter import ttk
 from datetime import datetime, timedelta
 
 import config
@@ -15,6 +17,7 @@ from record_broadcast import record_broadcast
 from fetch_access_token import fetch_access_token
 
 
+
 class CustomError(Exception):
     pass
 
@@ -24,6 +27,51 @@ class TwitchResponseStatus(enum.Enum):
     NOT_FOUND = 2
     UNAUTHORIZED = 3
     ERROR = 4
+
+
+class StreamRecorderApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Stream Recorder")
+        self.root.geometry("600x400")
+
+        # Создаем таблицу
+        self.tree = ttk.Treeview(root, columns=("Streamer", "Start Time", "Duration"), show="headings")
+        self.tree.heading("Streamer", text="Streamer")
+        self.tree.heading("Start Time", text="Start Time")
+        self.tree.heading("Duration", text="Duration")
+        self.tree.pack(fill=tk.BOTH, expand=True)
+
+        # Словарь для отслеживания активных записей
+        self.active_records = {}
+
+        # Запуск обновления длительности
+        self.update_duration()
+
+    def add_record(self, user_name):
+        start_time = datetime.now()
+        self.active_records[user_name] = {
+            "start_time": start_time,
+            "item_id": self.tree.insert("", "end", values=(user_name, start_time.strftime("%Y-%m-%d %H:%M:%S"), "0:00:00"))
+        }
+
+    def update_duration(self):
+        for user_name, record in self.active_records.items():
+            start_time = record["start_time"]
+            elapsed_time = datetime.now() - start_time
+            self.tree.item(record["item_id"], values=(
+                user_name,
+                start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                str(elapsed_time).split(".")[0]  # Убираем миллисекунды
+            ))
+
+        self.root.after(1000, self.update_duration)  # Вызываем снова через 1 секунду
+
+    def remove_record(self, user_name):
+        if user_name in self.active_records:
+            self.tree.delete(self.active_records[user_name]["item_id"])
+            del self.active_records[user_name]
+
 
 
 class RateLimiter:
@@ -89,10 +137,12 @@ def add_record_to_db(stream_data, recording_start):
         conn.close()
 
 
-def record_twitch_channel(active_users, active_pbars, stream_data, storages):
+def record_twitch_channel(active_users, stream_data, storages, app):
     try:
         user_name=stream_data['user_name']
         stream_id=stream_data['id']
+
+        active_users.add(user_name.lower())
 
         recording_start = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
         name_components = [recording_start, 'broadcast', user_name]
@@ -104,8 +154,6 @@ def record_twitch_channel(active_users, active_pbars, stream_data, storages):
             logger=logger
         )
 
-        active_users.add(user_name)
-
         logger.info(f"Запись стрима пользователя [ {user_name} - {stream_id} ] началась.")
 
         add_record_to_db(
@@ -113,16 +161,14 @@ def record_twitch_channel(active_users, active_pbars, stream_data, storages):
             recording_start=recording_start
         )
 
-        record_broadcast(recorded_file_path, user_name, active_pbars)
+        record_broadcast(recorded_file_path, user_name, app, logger)
 
         logger.info(f"Запись стрима пользователя [ {user_name} - {stream_id} ] закончилась.")
-
-
     except Exception as err:
         logger.error(f"Ошибка при записи трансляции канала {user_name}: {err}")
     finally:
         time.sleep(5)
-        active_users.discard(user_name)
+        active_users.discard(user_name.lower())
 
 
 def check_user(user_name, client_id, access_token):
@@ -167,25 +213,8 @@ def check_user(user_name, client_id, access_token):
     return None
 
 
-def update_pbars(active_pbars):
-    """Функция для обновления всех прогресс-баров."""
-    while True:
-        for pbar in active_pbars:
-            pbar.refresh()
-
-        time.sleep(1)
-
-
-def loop_check_with_rate_limit(client_id, client_secret, storages, user_names):
-    active_pbars = []
+def loop_check_with_rate_limit(client_id, client_secret, storages, user_names, app):
     active_users = set()
-
-    update_thread = threading.Thread(
-        target=update_pbars,
-        args=(active_pbars,),
-        daemon=True
-    )
-    update_thread.start()
 
     access_token = fetch_access_token(
         client_id=client_id,
@@ -196,7 +225,7 @@ def loop_check_with_rate_limit(client_id, client_secret, storages, user_names):
     while True:
         try:
             user_names_for_check = [
-                user_name for user_name
+                user_name.lower() for user_name
                 in user_names
                 if user_name not in active_users
             ]
@@ -213,9 +242,9 @@ def loop_check_with_rate_limit(client_id, client_secret, storages, user_names):
                     target=record_twitch_channel,
                     args=(
                         active_users,
-                        active_pbars,
                         stream_data,
-                        storages
+                        storages,
+                        app
                     ),
                     name=recording_thread_name,
                     daemon=True
@@ -231,6 +260,12 @@ def loop_check_with_rate_limit(client_id, client_secret, storages, user_names):
 
 
 def main():
+    root = tk.Tk()
+    app = StreamRecorderApp(root)
+
+    # Запускаем поток для обновления времени
+    threading.Thread(target=app.update_duration, daemon=True).start()
+
     logger.info("Программа для записи трансляций запущена!")
 
     init_database(
@@ -243,7 +278,13 @@ def main():
     usernames = config.user_names
     storages = config.storages
 
-    loop_check_with_rate_limit(client_id, client_secret, storages, usernames)
+    threading.Thread(
+        target=loop_check_with_rate_limit,
+        args=(client_id, client_secret, storages, usernames, app),
+        daemon=True
+    ).start()
+
+    root.mainloop()
 
 
 if __name__ == "__main__":

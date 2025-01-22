@@ -1,13 +1,11 @@
+import time
 import subprocess
 
-from tqdm import tqdm
 
+def record_broadcast(recorded_file_path, user_name, app, logger):
+    app.add_record(user_name)
 
-def record_broadcast(recorded_file_path, user_name, active_pbars):
-    with tqdm(total=0, desc=f'Запись стрима [ {user_name} ]',
-        ncols=0, leave=False, bar_format='{desc} {elapsed}') as pbar:
-        active_pbars.append(pbar)
-
+    try:
         process = subprocess.Popen([
             "streamlink",
             "--twitch-disable-ads",
@@ -19,5 +17,9 @@ def record_broadcast(recorded_file_path, user_name, active_pbars):
             recorded_file_path
         ], creationflags=subprocess.CREATE_NO_WINDOW)
 
-        process.wait()
-        active_pbars.remove(pbar)
+        while process.poll() is None:
+            time.sleep(1)  #
+    except Exception as err:
+        logger.error(f"Ошибка во время записи для {user_name}: {err}")
+    finally:
+        app.remove_record(user_name)
