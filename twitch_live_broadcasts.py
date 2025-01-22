@@ -10,9 +10,9 @@ from datetime import datetime, timedelta
 
 import config
 
+from utils import get_file_path
 from set_logger import set_logger
 from init_database import init_database
-from utils_file_path import get_file_path
 from record_broadcast import record_broadcast
 from fetch_access_token import fetch_access_token
 from get_twitch_user_id import get_twitch_user_id
@@ -230,7 +230,6 @@ def get_twitch_user_ids(user_identifiers, client_id, access_token):
                 user_ids.add(user_id)
 
     return list(user_ids)
-
 
 
 def loop_check_with_rate_limit(client_id, client_secret, storages, user_identifiers, app):
