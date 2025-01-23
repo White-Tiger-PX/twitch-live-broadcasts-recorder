@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 import config
 
-from utils import get_file_path
+from utils import get_video_path
 from set_logger import set_logger
 from init_database import init_database
 from record_broadcast import record_broadcast
@@ -143,7 +143,7 @@ def record_twitch_channel(active_users, stream_data, storages, app):
         recording_start = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
         name_components = [recording_start, 'broadcast', user_name]
 
-        recorded_file_path = get_file_path(
+        recorded_file_path = get_video_path(
             storages=storages,
             user_name=user_name,
             name_components=name_components,

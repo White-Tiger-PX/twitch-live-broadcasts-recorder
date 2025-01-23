@@ -30,7 +30,7 @@ def create_file_path(folder_path, name_components, extension, logger):
         raise
 
 
-def get_file_path(storages, user_name, name_components, logger):
+def get_video_path(storages, user_name, name_components, logger):
     storage_path = choose_storage(storages=storages, logger=logger)
     folder_path = os.path.join(storage_path, user_name)
 
