@@ -1,6 +1,9 @@
 import os
 
 from choose_storage import choose_storage
+from get_twitch_user_id import get_twitch_user_id
+
+import config
 
 
 def create_file_basename(name_components, extension, logger):
@@ -44,3 +47,27 @@ def get_video_path(storages, user_name, name_components, logger):
     )
 
     return file_path
+
+
+def get_twitch_user_ids(client_id, access_token, user_identifiers, logger):
+    headers = {"Client-ID": client_id, "Authorization": f"Bearer {access_token}"}
+
+    user_ids = set()
+
+    for user_identifier in user_identifiers:
+        if isinstance(user_identifier, int):
+            user_ids.add(str(user_identifier))
+        elif user_identifier.isdigit():
+            user_ids.add(str(user_identifier))
+        else:
+            user_id = get_twitch_user_id(
+                database_path=config.database_path,
+                user_name=user_identifier,
+                headers=headers,
+                main_logger=logger
+            )
+
+            if user_id:
+                user_ids.add(user_id)
+
+    return list(user_ids)

@@ -10,12 +10,14 @@ from datetime import datetime, timedelta
 
 import config
 
-from utils import get_video_path
 from set_logger import set_logger
 from init_database import init_database
 from record_broadcast import record_broadcast
 from fetch_access_token import fetch_access_token
-from get_twitch_user_id import get_twitch_user_id
+from utils import (
+    get_video_path,
+    get_twitch_user_ids
+)
 
 
 class TwitchResponseStatus(enum.Enum):
@@ -59,10 +61,10 @@ class StreamRecorderApp:
             self.tree.item(record["item_id"], values=(
                 user_name,
                 start_time.strftime("%Y-%m-%d %H:%M:%S"),
-                str(elapsed_time).split(".")[0]  # Убираем миллисекунды
+                str(elapsed_time).split(".")[0]
             ))
 
-        self.root.after(1000, self.update_duration)  # Вызываем снова через 1 секунду
+        self.root.after(1000, self.update_duration)
 
     def remove_record(self, user_name):
         if user_name in self.active_records:
@@ -208,30 +210,6 @@ def check_user(user_id, client_id, access_token):
     return None
 
 
-def get_twitch_user_ids(user_identifiers, client_id, access_token):
-    headers = {"Client-ID": client_id, "Authorization": f"Bearer {access_token}"}
-
-    user_ids = set()
-
-    for user_identifier in user_identifiers:
-        if isinstance(user_identifier, int):
-            user_ids.add(str(user_identifier))
-        elif user_identifier.isdigit():
-            user_ids.add(str(user_identifier))
-        else:
-            user_id = get_twitch_user_id(
-                database_path=config.database_path,
-                user_name=user_identifier,
-                headers=headers,
-                main_logger=logger
-            )
-
-            if user_id:
-                user_ids.add(user_id)
-
-    return list(user_ids)
-
-
 def loop_check_with_rate_limit(client_id, client_secret, storages, user_identifiers, app):
     active_users = set()
 
@@ -241,7 +219,12 @@ def loop_check_with_rate_limit(client_id, client_secret, storages, user_identifi
         logger=logger
     )
 
-    user_ids = get_twitch_user_ids(user_identifiers, client_id, access_token)
+    user_ids = get_twitch_user_ids(
+        client_id=client_id,
+        access_token=access_token,
+        user_identifiers=user_identifiers,
+        logger=logger
+    )
 
     while True:
         try:
