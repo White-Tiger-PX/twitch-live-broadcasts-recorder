@@ -169,23 +169,27 @@ def record_twitch_channel(active_users, stream_data, storages, app):
         active_users.discard(user_id)
 
 
-def check_user(user_id, client_id, access_token):
+def check_users(user_ids, client_id, access_token):
     info = None
     status = TwitchResponseStatus.ERROR
     url = "https://api.twitch.tv/helix/streams"
 
+    # Формируем параметры для запроса с несколькими стримерами
+    params = '&'.join([f'user_id={user_id}' for user_id in user_ids])
+
     try:
         headers = {"Client-ID": client_id, "Authorization": "Bearer " + access_token}
-        r = requests.get(url + "?user_id=" + user_id, headers=headers, timeout=15)
+        r = requests.get(url + f"?{params}", headers=headers, timeout=15)
         r.raise_for_status()
         info = r.json()
 
-        if info is None or not info["data"]:
-            status = TwitchResponseStatus.OFFLINE
-        else:
-            status = TwitchResponseStatus.ONLINE
+        active_streamers = []
 
-            return info["data"][0]
+        for stream in info.get("data", []):
+            active_streamers.append(stream)
+
+        return active_streamers
+
     except requests.exceptions.RequestException as e:
         if e.response:
             if e.response.status_code == 401:
@@ -194,12 +198,12 @@ def check_user(user_id, client_id, access_token):
                 status = TwitchResponseStatus.NOT_FOUND
 
     if status == TwitchResponseStatus.NOT_FOUND:
-        logger.info(f"1. {user_id}\n2. {status}\n3. {info}")
+        logger.info(f"Ошибка с пользователями {user_ids}\n{status}\n{info}")
     elif status == TwitchResponseStatus.ERROR:
         if info is not None:
-            logger.info(f"1. {user_id}\n2. {status}\n3. {info}")
+            logger.info(f"Ошибка с пользователями {user_ids}\n{status}\n{info}")
     elif status == TwitchResponseStatus.UNAUTHORIZED:
-        logger.warning(f"Токен устарел для {user_id}, обновляем...")
+        logger.warning(f"Токен устарел для некоторых пользователей, обновляем...")
 
         access_token = fetch_access_token(
             client_id=client_id,
@@ -228,20 +232,28 @@ def loop_check_with_rate_limit(client_id, client_secret, storages, user_identifi
 
     while True:
         try:
+            limiter.wait()
+
             user_ids_for_check = [
                 user_id for user_id
                 in user_ids
                 if user_id not in active_users
             ]
 
-            for user_id in user_ids_for_check:
-                limiter.wait()
-                stream_data = check_user(user_id, client_id, access_token)
+            if not user_ids_for_check:
+                continue
 
-                if stream_data is None:
-                    continue
+            streams_data = check_users(
+                user_ids=user_ids_for_check,
+                client_id=client_id,
+                access_token=access_token
+            )
 
-                recording_thread_name = f"process_recorded_broadcasts_thread_{user_id}"
+            if streams_data is None:
+                continue
+
+            for stream_data in streams_data:
+                recording_thread_name = f"process_recorded_broadcasts_thread_{stream_data['user_id']}"
                 recording_thread = threading.Thread(
                     target=record_twitch_channel,
                     args=(
@@ -255,12 +267,9 @@ def loop_check_with_rate_limit(client_id, client_secret, storages, user_identifi
                 )
                 recording_thread.start()
 
-                time.sleep(5)
+            time.sleep(5)
         except Exception as err:
             logger.error(f"Ошибка при проверке трансляции: {err}")
-            time.sleep(15)
-
-        time.sleep(1)
 
 
 def main():
@@ -291,7 +300,7 @@ def main():
 
 
 if __name__ == "__main__":
-    limiter = RateLimiter(max_requests=1, period=1)
+    limiter = RateLimiter(max_requests=1, period=5)
     logger = set_logger(log_folder=config.log_folder)
 
     main()
