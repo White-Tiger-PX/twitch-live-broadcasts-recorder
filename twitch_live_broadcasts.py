@@ -169,16 +169,15 @@ def record_twitch_channel(active_users, stream_data, storages, app):
         active_users.discard(user_id)
 
 
-def check_users(user_ids, client_id, access_token):
+def check_users(user_ids, client_id, token_container):
     info = None
     status = TwitchResponseStatus.ERROR
     url = "https://api.twitch.tv/helix/streams"
 
-    # Формируем параметры для запроса с несколькими стримерами
     params = '&'.join([f'user_id={user_id}' for user_id in user_ids])
 
     try:
-        headers = {"Client-ID": client_id, "Authorization": "Bearer " + access_token}
+        headers = {"Client-ID": client_id, "Authorization": "Bearer " + token_container["access_token"]}
         r = requests.get(url + f"?{params}", headers=headers, timeout=15)
         r.raise_for_status()
         info = r.json()
@@ -203,9 +202,9 @@ def check_users(user_ids, client_id, access_token):
         if info is not None:
             logger.info(f"Ошибка с пользователями {user_ids}\n{status}\n{info}")
     elif status == TwitchResponseStatus.UNAUTHORIZED:
-        logger.warning(f"Токен устарел для некоторых пользователей, обновляем...")
+        logger.warning("Токен устарел для некоторых пользователей, необходимо обновление")
 
-        access_token = fetch_access_token(
+        token_container["access_token"] = fetch_access_token(
             client_id=client_id,
             client_secret=config.client_secret,
             logger=logger
@@ -214,18 +213,13 @@ def check_users(user_ids, client_id, access_token):
     return None
 
 
-def loop_check_with_rate_limit(client_id, client_secret, storages, user_identifiers, app):
+def loop_check_with_rate_limit(client_id, storages, user_identifiers, app, token_container):
     active_users = set()
 
-    access_token = fetch_access_token(
-        client_id=client_id,
-        client_secret=client_secret,
-        logger=logger
-    )
-
+    # Изначально получаем идентификаторы пользователей
     user_ids = get_twitch_user_ids(
         client_id=client_id,
-        access_token=access_token,
+        access_token=token_container["access_token"],
         user_identifiers=user_identifiers,
         logger=logger
     )
@@ -246,7 +240,7 @@ def loop_check_with_rate_limit(client_id, client_secret, storages, user_identifi
             streams_data = check_users(
                 user_ids=user_ids_for_check,
                 client_id=client_id,
-                access_token=access_token
+                token_container=token_container
             )
 
             if streams_data is None:
@@ -272,6 +266,22 @@ def loop_check_with_rate_limit(client_id, client_secret, storages, user_identifi
             logger.error(f"Ошибка при проверке трансляции: {err}")
 
 
+def token_updater(client_id, client_secret, update_interval, token_container):
+    while True:
+        try:
+            logger.info("Обновление токена доступа...")
+            token_container["access_token"] = fetch_access_token(
+                client_id=client_id,
+                client_secret=client_secret,
+                logger=logger
+            )
+            logger.info("Токен успешно обновлён.")
+        except Exception as err:
+            logger.error(f"Ошибка при обновлении токена: {err}")
+
+        time.sleep(update_interval)
+
+
 def main():
     root = tk.Tk()
     app = StreamRecorderApp(root)
@@ -290,9 +300,19 @@ def main():
     usernames = config.user_identifiers
     storages = config.storages
 
+    token_container = {
+        "access_token": fetch_access_token(client_id, client_secret, logger)
+    }
+
+    threading.Thread(
+        target=token_updater,
+        args=(client_id, client_secret, 14400, token_container),
+        daemon=True
+    ).start()
+
     threading.Thread(
         target=loop_check_with_rate_limit,
-        args=(client_id, client_secret, storages, usernames, app),
+        args=(client_id, storages, usernames, app, token_container),
         daemon=True
     ).start()
 
@@ -300,7 +320,8 @@ def main():
 
 
 if __name__ == "__main__":
-    limiter = RateLimiter(max_requests=1, period=5)
     logger = set_logger(log_folder=config.log_folder)
+
+    limiter = RateLimiter(max_requests=1, period=5)
 
     main()
