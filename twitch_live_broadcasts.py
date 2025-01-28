@@ -1,5 +1,4 @@
 import time
-import enum
 import sqlite3
 import requests
 import threading
@@ -20,31 +19,45 @@ from utils import (
 )
 
 
-class TwitchResponseStatus(enum.Enum):
-    ONLINE = 0
-    OFFLINE = 1
-    NOT_FOUND = 2
-    UNAUTHORIZED = 3
-    ERROR = 4
-
-
 class StreamRecorderApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Stream Recorder")
         self.root.geometry("600x400")
 
-        # Создаем таблицу
-        self.tree = ttk.Treeview(root, columns=("Streamer", "Start Time", "Duration"), show="headings")
+        self.root.configure(bg="black")
+
+        style = ttk.Style()
+        style.theme_use("default")
+        style.configure(
+            "Treeview",
+            background="black",
+            foreground="white",
+            fieldbackground="black",
+            font=("Arial", 12),
+            rowheight=25
+        )
+        style.configure(
+            "Treeview.Heading",
+            background="gray",
+            foreground="white",
+            font=("Arial", 12, "bold")
+        )
+        style.map("Treeview", background=[("selected", "gray")])
+
+        self.tree = ttk.Treeview(
+            root,
+            columns=("Streamer", "Start Time", "Duration"),
+            show="headings",
+            style="Treeview"
+        )
         self.tree.heading("Streamer", text="Streamer")
         self.tree.heading("Start Time", text="Start Time")
         self.tree.heading("Duration", text="Duration")
         self.tree.pack(fill=tk.BOTH, expand=True)
 
-        # Словарь для отслеживания активных записей
         self.active_records = {}
 
-        # Запуск обновления длительности
         self.update_duration()
 
     def add_record(self, user_name):
@@ -69,6 +82,7 @@ class StreamRecorderApp:
     def remove_record(self, user_name):
         if user_name in self.active_records:
             self.tree.delete(self.active_records[user_name]["item_id"])
+
             del self.active_records[user_name]
 
 
@@ -169,9 +183,8 @@ def record_twitch_channel(active_users, stream_data, storages, app):
         active_users.discard(user_id)
 
 
-def check_users(user_ids, client_id, token_container):
+def check_users(client_id, client_secret, token_container, user_ids):
     info = None
-    status = TwitchResponseStatus.ERROR
     url = "https://api.twitch.tv/helix/streams"
 
     params = '&'.join([f'user_id={user_id}' for user_id in user_ids])
@@ -188,32 +201,23 @@ def check_users(user_ids, client_id, token_container):
             active_streamers.append(stream)
 
         return active_streamers
-
     except requests.exceptions.RequestException as e:
-        if e.response:
-            if e.response.status_code == 401:
-                status = TwitchResponseStatus.UNAUTHORIZED
-            elif e.response.status_code == 404:
-                status = TwitchResponseStatus.NOT_FOUND
+        if e.response and e.response.status_code == 401:
+            token_container["access_token"] = fetch_access_token(
+                client_id=client_id,
+                client_secret=client_secret,
+                logger=logger
+            )
 
-    if status == TwitchResponseStatus.NOT_FOUND:
-        logger.info(f"Ошибка с пользователями {user_ids}\n{status}\n{info}")
-    elif status == TwitchResponseStatus.ERROR:
-        if info is not None:
-            logger.info(f"Ошибка с пользователями {user_ids}\n{status}\n{info}")
-    elif status == TwitchResponseStatus.UNAUTHORIZED:
-        logger.warning("Токен устарел для некоторых пользователей, необходимо обновление")
-
-        token_container["access_token"] = fetch_access_token(
-            client_id=client_id,
-            client_secret=config.client_secret,
-            logger=logger
-        )
+        else:
+            logger.error(f"Ошибка при проверки статуса пользователей {user_ids}: {e}")
+    except Exception as e:
+        logger.error(f"Ошибка при проверки статуса пользователей {user_ids}: {e}")
 
     return None
 
 
-def loop_check_with_rate_limit(client_id, storages, user_identifiers, app, token_container):
+def loop_check_with_rate_limit(client_id, client_secret, token_container, storages, user_identifiers, app):
     active_users = set()
 
     # Изначально получаем идентификаторы пользователей
@@ -238,9 +242,10 @@ def loop_check_with_rate_limit(client_id, storages, user_identifiers, app, token
                 continue
 
             streams_data = check_users(
-                user_ids=user_ids_for_check,
                 client_id=client_id,
-                token_container=token_container
+                client_secret=client_secret,
+                token_container=token_container,
+                user_ids=user_ids_for_check
             )
 
             if streams_data is None:
@@ -266,15 +271,17 @@ def loop_check_with_rate_limit(client_id, storages, user_identifiers, app, token
             logger.error(f"Ошибка при проверке трансляции: {err}")
 
 
-def token_updater(client_id, client_secret, update_interval, token_container):
+def token_updater(client_id, client_secret, token_container, update_interval):
     while True:
         try:
             logger.info("Обновление токена доступа...")
+
             token_container["access_token"] = fetch_access_token(
                 client_id=client_id,
                 client_secret=client_secret,
                 logger=logger
             )
+
             logger.info("Токен успешно обновлён.")
         except Exception as err:
             logger.error(f"Ошибка при обновлении токена: {err}")
@@ -286,8 +293,6 @@ def main():
     root = tk.Tk()
     app = StreamRecorderApp(root)
 
-    threading.Thread(target=app.update_duration, daemon=True).start()
-
     logger.info("Программа для записи трансляций запущена!")
 
     init_database(
@@ -297,7 +302,7 @@ def main():
 
     client_id = config.client_id
     client_secret = config.client_secret
-    usernames = config.user_identifiers
+    user_identifiers = config.user_identifiers
     storages = config.storages
 
     token_container = {
@@ -306,17 +311,18 @@ def main():
 
     threading.Thread(
         target=token_updater,
-        args=(client_id, client_secret, 14400, token_container),
+        args=(client_id, client_secret, token_container, 14400),
         daemon=True
     ).start()
 
     threading.Thread(
         target=loop_check_with_rate_limit,
-        args=(client_id, storages, usernames, app, token_container),
+        args=(client_id, client_secret, token_container, storages, user_identifiers, app),
         daemon=True
     ).start()
 
     root.mainloop()
+
 
 
 if __name__ == "__main__":
