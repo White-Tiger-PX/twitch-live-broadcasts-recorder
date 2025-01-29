@@ -201,18 +201,17 @@ def check_users(client_id, client_secret, token_container, user_ids):
             active_streamers.append(stream)
 
         return active_streamers
-    except requests.exceptions.RequestException as e:
-        if e.response and e.response.status_code == 401:
+    except requests.exceptions.HTTPError as e:
+        if e.response is not None and e.response.status_code == 401:
             token_container["access_token"] = fetch_access_token(
                 client_id=client_id,
                 client_secret=client_secret,
                 logger=logger
             )
-
         else:
-            logger.error(f"Ошибка при проверки статуса пользователей {user_ids}: {e}")
+            logger.error(f"Ошибка при проверки статуса пользователей: {e}")
     except Exception as e:
-        logger.error(f"Ошибка при проверки статуса пользователей {user_ids}: {e}")
+        logger.error(f"Ошибка при проверки статуса пользователей: {e}")
 
     return None
 
@@ -274,15 +273,11 @@ def loop_check_with_rate_limit(client_id, client_secret, token_container, storag
 def token_updater(client_id, client_secret, token_container, update_interval):
     while True:
         try:
-            logger.info("Обновление токена доступа...")
-
             token_container["access_token"] = fetch_access_token(
                 client_id=client_id,
                 client_secret=client_secret,
                 logger=logger
             )
-
-            logger.info("Токен успешно обновлён.")
         except Exception as err:
             logger.error(f"Ошибка при обновлении токена: {err}")
 
@@ -311,7 +306,7 @@ def main():
 
     threading.Thread(
         target=token_updater,
-        args=(client_id, client_secret, token_container, 14400),
+        args=(client_id, client_secret, token_container, 3600),
         daemon=True
     ).start()
 
