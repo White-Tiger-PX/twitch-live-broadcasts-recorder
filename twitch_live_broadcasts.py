@@ -302,7 +302,7 @@ def main():
     storages = config.storages
 
     token_container = {
-        "access_token": fetch_access_token(client_id, client_secret, logger)
+        "access_token": None
     }
 
     threading.Thread(
