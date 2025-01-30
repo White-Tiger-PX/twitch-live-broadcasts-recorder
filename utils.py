@@ -1,15 +1,15 @@
 import os
 
+import config
+
 from choose_storage import choose_storage
 from get_twitch_user_id import get_twitch_user_id
-
-import config
 
 
 def create_file_basename(name_components, extension, logger):
     try:
         name_components = [str(item) for item in name_components]
-        raw_filename = f"{' - '.join(name_components)} - 1.{extension}"
+        raw_filename = f"{' - '.join(name_components)}.{extension}"
         sanitized_filename = "".join(
             char for char in raw_filename if char.isalnum() or char in [" ", "-", "_", "."]
         )
