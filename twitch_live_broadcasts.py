@@ -154,10 +154,12 @@ def record_twitch_channel(active_users, stream_data, storages, app):
         user_id = stream_data['user_id']
         stream_id = stream_data['id']
 
+        video_label = f"[ {user_name} - {stream_id} ]"
+
         active_users.add(user_id)
 
         recording_start = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
-        name_components = [recording_start, 'broadcast', user_name]
+        name_components = [recording_start, 'broadcast', user_name, stream_id]
 
         recorded_file_path = get_video_path(
             storages=storages,
@@ -166,7 +168,7 @@ def record_twitch_channel(active_users, stream_data, storages, app):
             logger=logger
         )
 
-        logger.info(f"Запись стрима пользователя [ {user_name} - {stream_id} ] началась.")
+        logger.info(f"Запись стрима пользователя {video_label} началась.")
 
         add_record_to_db(
             stream_data=stream_data,
@@ -175,9 +177,9 @@ def record_twitch_channel(active_users, stream_data, storages, app):
 
         record_broadcast(recorded_file_path, user_name, app, logger)
 
-        logger.info(f"Запись стрима пользователя [ {user_name} - {stream_id} ] закончилась.")
+        logger.info(f"Запись стрима пользователя {video_label} закончилась.")
     except Exception as err:
-        logger.error(f"Ошибка при записи трансляции канала {user_name}: {err}")
+        logger.error(f"Ошибка при записи трансляции канала [ {user_name} ]: {err}")
     finally:
         time.sleep(5)
         active_users.discard(user_id)
@@ -186,7 +188,6 @@ def record_twitch_channel(active_users, stream_data, storages, app):
 def check_users(client_id, client_secret, token_container, user_ids):
     info = None
     url = "https://api.twitch.tv/helix/streams"
-
     params = '&'.join([f'user_id={user_id}' for user_id in user_ids])
 
     try:
