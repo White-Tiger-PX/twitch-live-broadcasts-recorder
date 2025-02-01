@@ -51,10 +51,16 @@ class StreamRecorderApp:
             show="headings",
             style="Treeview"
         )
+
         self.tree.heading("Streamer", text="Streamer")
         self.tree.heading("Start Time", text="Start Time")
         self.tree.heading("Duration", text="Duration")
         self.tree.pack(fill=tk.BOTH, expand=True)
+
+        # Настройка столбцов для их ширины и выравнивания
+        self.tree.column("Streamer", width=100, anchor="center")
+        self.tree.column("Start Time", width=100, anchor="center")
+        self.tree.column("Duration", width=100, anchor="center")
 
         self.active_records = {}
 
