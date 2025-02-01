@@ -57,7 +57,7 @@ class StreamRecorderApp:
         self.tree.heading("Duration", text="Duration")
         self.tree.pack(fill=tk.BOTH, expand=True)
 
-        # Настройка столбцов для их ширины и выравнивания
+        # Настройка столбцов: ширины и выравнивания
         self.tree.column("Streamer", width=100, anchor="center")
         self.tree.column("Start Time", width=100, anchor="center")
         self.tree.column("Duration", width=100, anchor="center")
@@ -72,6 +72,9 @@ class StreamRecorderApp:
             "start_time": start_time,
             "item_id": self.tree.insert("", "end", values=(user_name, start_time.strftime("%Y-%m-%d %H:%M:%S"), "0:00:00"))
         }
+
+        # Подбираем ширину столбцов
+        self.resize_columns()
 
     def update_duration(self):
         for user_name, record in self.active_records.items():
@@ -90,6 +93,24 @@ class StreamRecorderApp:
             self.tree.delete(self.active_records[user_name]["item_id"])
 
             del self.active_records[user_name]
+
+            # Подбираем ширину столбцов
+            self.resize_columns()
+
+    def resize_columns(self):
+        """Автоматически изменяет ширину столбцов в зависимости от их содержимого."""
+        for col in self.tree["columns"]:
+            max_width = 0
+
+            # Пройти по всем строкам в столбце и найти максимальную длину текста
+            for row in self.tree.get_children():
+
+                item_text = str(self.tree.item(row)["values"][self.tree["columns"].index(col)])
+                max_width = max(max_width, len(item_text))
+
+            # Установить ширину столбца в соответствии с максимальной длиной текста
+            # с учетом множителя для отступов
+            self.tree.column(col, width=max(max_width * 10, 100))  # минимум 100 пикселей
 
 
 class RateLimiter:
