@@ -1,7 +1,5 @@
 import os
 
-import config
-
 from choose_storage import choose_storage
 from get_twitch_user_id import get_twitch_user_id
 
@@ -49,7 +47,7 @@ def get_video_path(storages, user_name, name_components, logger):
     return file_path
 
 
-def get_twitch_user_ids(client_id, access_token, user_identifiers, logger):
+def get_twitch_user_ids(client_id, access_token, database_path, user_identifiers, logger):
     headers = {"Client-ID": client_id, "Authorization": f"Bearer {access_token}"}
 
     user_ids = set()
@@ -61,7 +59,7 @@ def get_twitch_user_ids(client_id, access_token, user_identifiers, logger):
             user_ids.add(str(user_identifier))
         else:
             user_id = get_twitch_user_id(
-                database_path=config.database_path,
+                database_path=database_path,
                 user_name=user_identifier,
                 headers=headers,
                 main_logger=logger

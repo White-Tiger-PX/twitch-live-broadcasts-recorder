@@ -247,6 +247,7 @@ def loop_check_with_rate_limit(client_id, client_secret, token_container, storag
     user_ids = get_twitch_user_ids(
         client_id=client_id,
         access_token=token_container["access_token"],
+        database_path=config.database_path,
         user_identifiers=user_identifiers,
         logger=logger
     )
@@ -321,7 +322,6 @@ def main():
 
 if __name__ == "__main__":
     logger = set_logger(log_folder=config.log_folder)
-
     limiter = RateLimiter(max_requests=1, period=5)
 
     main()
