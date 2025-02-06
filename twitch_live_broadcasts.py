@@ -5,7 +5,7 @@ import threading
 import tkinter as tk
 
 from tkinter import ttk
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import config
 
@@ -106,7 +106,7 @@ class StreamRecorderApp:
             self.tree.item(record["item_id"], values=(
                 user_name,
                 start_time.strftime("%Y-%m-%d %H:%M:%S"),
-                str(elapsed_time).split(".")[0]
+                str(elapsed_time).split(".", maxsplit=1)[0]
             ))
 
         self.root.after(1000, self.update_duration)
