@@ -46,7 +46,7 @@ class StreamRecorderApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Stream Recorder")
-        self.root.geometry("600x400")
+        self.root.geometry("600x300")
 
         self.root.configure(bg="black")
 
@@ -144,32 +144,29 @@ def current_datetime_to_utc_iso():
 
 def add_record_to_db(stream_data, recording_start):
     try:
-        conn = sqlite3.connect(config.database_path)
-        cursor = conn.cursor()
+        with sqlite3.connect(config.database_path) as conn:
+            cursor = conn.cursor()
 
-        cursor.execute('''
-            INSERT INTO live_broadcast (
-                user_id,
-                user_name,
-                stream_id,
+            cursor.execute('''
+                INSERT INTO live_broadcast (
+                    user_id,
+                    user_name,
+                    stream_id,
+                    recording_start,
+                    title
+                )
+                VALUES (?, ?, ?, ?, ?)
+            ''', (
+                stream_data['user_id'],
+                stream_data['user_name'],
+                stream_data['id'],
                 recording_start,
-                title
-            )
-            VALUES (?, ?, ?, ?, ?)
-        ''', (
-            stream_data['user_id'],
-            stream_data['user_name'],
-            stream_data['id'],
-            recording_start,
-            stream_data['title']
-        ))
+                stream_data['title']
+            ))
 
-        conn.commit()
+            conn.commit()
     except Exception as err:
         logger.error(f"Ошибка при добавлении записи: {err}")
-    finally:
-        cursor.close()
-        conn.close()
 
 
 def record_twitch_channel(active_users, stream_data, storages, app):
