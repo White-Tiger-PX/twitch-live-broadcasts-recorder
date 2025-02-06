@@ -10,6 +10,7 @@
 import os
 
 from choose_storage import choose_storage
+from fetch_access_token import fetch_access_token
 from get_twitch_user_id import get_twitch_user_id
 
 
@@ -98,13 +99,14 @@ def get_video_path(storages, user_name, name_components, logger):
     return file_path
 
 
-def get_twitch_user_ids(client_id, access_token, database_path, user_identifiers, logger):
+def get_twitch_user_ids(client_id, client_secret, token_container, database_path, user_identifiers, logger):
     """
     Получает список идентификаторов пользователей Twitch по предоставленным идентификаторам или именам.
 
     Args:
         client_id (str): Идентификатор клиента Twitch.
-        access_token (str): Токен доступа Twitch.
+        client_secret (str): Секретный ключ для доступа к API Twitch.
+        token_container (dict): Контейнер с токеном доступа для API Twitch.
         database_path (str): Путь к базе данных для поиска идентификаторов пользователей.
         user_identifiers (list): Список идентификаторов или имен пользователей Twitch.
         logger (Logger): Логгер.
@@ -112,7 +114,12 @@ def get_twitch_user_ids(client_id, access_token, database_path, user_identifiers
     Returns:
         list: Список уникальных идентификаторов пользователей Twitch.
     """
-    headers = {"Client-ID": client_id, "Authorization": f"Bearer {access_token}"}
+    token_container["access_token"] = fetch_access_token(
+        client_id=client_id,
+        client_secret=client_secret,
+        logger=logger
+    )
+    headers = {"Client-ID": client_id, "Authorization": f"Bearer {token_container["access_token"]}"}
     user_ids = set()
 
     for user_identifier in user_identifiers:

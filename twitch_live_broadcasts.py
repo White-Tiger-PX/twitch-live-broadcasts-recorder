@@ -279,7 +279,7 @@ def check_users(client_id, client_secret, token_container, user_ids):
     return []
 
 
-def loop_check_with_rate_limit(client_id, client_secret, token_container, storages, user_identifiers, app):
+def loop_check_with_rate_limit(client_id, client_secret, storages, user_identifiers, app):
     """
     Бесконечный цикл для проверки активных пользователей и записи обнаруженных трансляций.
 
@@ -289,17 +289,18 @@ def loop_check_with_rate_limit(client_id, client_secret, token_container, storag
     Args:
         client_id (str): Идентификатор клиента для API Twitch.
         client_secret (str): Секрет клиента для API Twitch.
-        token_container (dict): Контейнер с токеном доступа для API Twitch.
         storages (dict): Контейнер для хранения информации о хранилищах для записи.
         user_identifiers (list): Список идентификаторов пользователей для проверки.
         app (StreamRecorderApp): Приложение для записи и управления стримами.
     """
+    token_container = {"access_token": None}
     active_users = set()
 
-    # Изначально получаем идентификаторы пользователей
+    # Получаем ID пользователей
     user_ids = get_twitch_user_ids(
         client_id=client_id,
-        access_token=token_container["access_token"],
+        client_secret=client_secret,
+        token_container=token_container,
         database_path=config.database_path,
         user_identifiers=user_identifiers,
         logger=logger
@@ -355,12 +356,10 @@ def main():
     user_identifiers = config.user_identifiers
     storages = config.storages
 
-    token_container = {"access_token": None}
-
     # запускаем в отдельном потоке чтобы иметь возможность обновлять GUI
     threading.Thread(
         target=loop_check_with_rate_limit,
-        args=(client_id, client_secret, token_container, storages, user_identifiers, app),
+        args=(client_id, client_secret, storages, user_identifiers, app),
         daemon=True
     ).start()
 
