@@ -13,10 +13,33 @@ from set_logger import set_logger
 from init_database import init_database
 from record_broadcast import record_broadcast
 from fetch_access_token import fetch_access_token
-from utils import (
-    get_video_path,
-    get_twitch_user_ids
-)
+from utils import get_video_path, get_twitch_user_ids
+
+
+class RateLimiter:
+    def __init__(self, max_requests, period):
+        self.max_requests = max_requests
+        self.period = period
+        self.requests = []
+        self.lock = threading.Lock()
+
+    def wait(self):
+        with self.lock:
+            now = time.time()
+
+            # Очищаем старые запросы, которые вышли за пределы периода
+            self.requests = [req for req in self.requests if req > now - self.period]
+
+            # Проверяем, не превышает ли количество запросов лимит
+            if len(self.requests) >= self.max_requests:
+                # Ждем до тех пор, пока не пройдет период с первого запроса
+                sleep_time = self.period - (now - self.requests[0])
+
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+
+            # Добавляем текущий запрос в список
+            self.requests.append(time.time())
 
 
 class StreamRecorderApp:
@@ -113,32 +136,6 @@ class StreamRecorderApp:
             self.tree.column(col, width=max(max_width * 10, 100))  # минимум 100 пикселей
 
 
-class RateLimiter:
-    def __init__(self, max_requests, period):
-        self.max_requests = max_requests
-        self.period = period
-        self.requests = []
-        self.lock = threading.Lock()
-
-    def wait(self):
-        with self.lock:
-            now = time.time()
-
-            # Очищаем старые запросы, которые вышли за пределы периода
-            self.requests = [req for req in self.requests if req > now - self.period]
-
-            # Проверяем, не превышает ли количество запросов лимит
-            if len(self.requests) >= self.max_requests:
-                # Ждем до тех пор, пока не пройдет период с первого запроса
-                sleep_time = self.period - (now - self.requests[0])
-
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
-
-            # Добавляем текущий запрос в список
-            self.requests.append(time.time())
-
-
 def current_datetime_to_utc_iso():
     now = datetime.now() + timedelta(hours=config.utc_offset_hours)
 
@@ -218,8 +215,8 @@ def check_users(client_id, client_secret, token_container, user_ids):
     params = '&'.join([f'user_id={user_id}' for user_id in user_ids])
 
     try:
-        headers = {"Client-ID": client_id, "Authorization": "Bearer " + token_container["access_token"]}
-        r = requests.get(url + f"?{params}", headers=headers, timeout=15)
+        headers = {"Client-ID": client_id, "Authorization": f"Bearer {token_container["access_token"]}" }
+        r = requests.get(f"{url}?{params}", headers=headers, timeout=15)
         r.raise_for_status()
         info = r.json()
 
@@ -338,6 +335,7 @@ def main():
         daemon=True
     ).start()
 
+    # запускаем в отдельном потоке чтобы иметь возможность обновлять GUI
     threading.Thread(
         target=loop_check_with_rate_limit,
         args=(client_id, client_secret, token_container, storages, user_identifiers, app),
@@ -345,7 +343,6 @@ def main():
     ).start()
 
     root.mainloop()
-
 
 
 if __name__ == "__main__":
