@@ -136,12 +136,6 @@ class StreamRecorderApp:
             self.tree.column(col, width=max(max_width * 10, 100))  # минимум 100 пикселей
 
 
-def current_datetime_to_utc_iso():
-    now = datetime.now() + timedelta(hours=config.utc_offset_hours)
-
-    return now.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def add_record_to_db(stream_data, recording_start):
     try:
         with sqlite3.connect(config.database_path) as conn:
@@ -191,11 +185,7 @@ def record_twitch_channel(active_users, stream_data, storages, app):
 
         logger.info(f"Запись стрима пользователя {video_label} началась.")
 
-        add_record_to_db(
-            stream_data=stream_data,
-            recording_start=recording_start
-        )
-
+        add_record_to_db(stream_data=stream_data, recording_start=recording_start)
         record_broadcast(recorded_file_path, user_name, app, logger)
 
         logger.info(f"Запись стрима пользователя {video_label} закончилась.")
