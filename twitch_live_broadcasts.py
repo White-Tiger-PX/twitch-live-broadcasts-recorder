@@ -197,20 +197,22 @@ def record_twitch_channel(active_users, stream_data, storages, app):
 
 
 def check_users(client_id, client_secret, token_container, user_ids):
-    info = None
-    url = "https://api.twitch.tv/helix/streams"
-    params = '&'.join([f'user_id={user_id}' for user_id in user_ids])
+    if not user_ids:
+        return []
+
+    active_streamers = []
 
     try:
-        headers = {"Client-ID": client_id, "Authorization": f"Bearer {token_container["access_token"]}" }
-        r = requests.get(f"{url}?{params}", headers=headers, timeout=15)
-        r.raise_for_status()
-        info = r.json()
+        headers = {"Client-ID": client_id, "Authorization": f"Bearer {token_container["access_token"]}"}
 
-        active_streamers = []
+        params = '&'.join([f'user_id={user_id}' for user_id in user_ids])
+        r = requests.get(f"https://api.twitch.tv/helix/streams?{params}", headers=headers, timeout=15)
+        r.raise_for_status()
+        info = r.json() if r.json() else None
 
         for stream in info.get("data", []):
-            active_streamers.append(stream)
+            if stream:
+                active_streamers.append(stream)
 
         return active_streamers
     except requests.exceptions.HTTPError as e:
@@ -227,7 +229,7 @@ def check_users(client_id, client_secret, token_container, user_ids):
     except Exception as e:
         logger.error(f"Ошибка при проверки статуса пользователей: {e}")
 
-    return None
+    return []
 
 
 def loop_check_with_rate_limit(client_id, client_secret, token_container, storages, user_identifiers, app):
@@ -252,18 +254,12 @@ def loop_check_with_rate_limit(client_id, client_secret, token_container, storag
                 if user_id not in active_users
             ]
 
-            if not user_ids_for_check:
-                continue
-
             streams_data = check_users(
                 client_id=client_id,
                 client_secret=client_secret,
                 token_container=token_container,
                 user_ids=user_ids_for_check
             )
-
-            if streams_data is None:
-                continue
 
             for stream_data in streams_data:
                 recording_thread_name = f"process_recorded_broadcasts_thread_{stream_data['user_id']}"
