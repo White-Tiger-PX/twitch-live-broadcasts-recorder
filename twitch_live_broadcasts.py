@@ -43,11 +43,37 @@ class RateLimiter:
 
 
 class StreamRecorderApp:
+    """
+    Приложение для отображения информации о текущих стримах.
+
+    Этот класс предоставляет функциональность отображения информации
+    о пользователях, времени начала и продолжительности стрима.
+
+    Краткое описание функций:
+        - add_record: Добавляет новый стрим в список активных записей.
+        - update_duration: Обновляет продолжительность активных стримов.
+        - remove_record: Удаляет стрим из списка активных.
+        - resize_columns: Автоматически регулирует ширину столбцов в таблице для отображения данных.
+
+    Args:
+        root (tk.Tk): Основное окно приложения.
+        tree (ttk.Treeview): Виджет для отображения информации о стримах.
+        active_records (dict): Словарь с активными записями, где ключ — имя стримера, а значение — информация о записи.
+    """
+
     def __init__(self, root):
+        """
+        Инициализирует приложение StreamRecorderApp.
+
+        Настроены основные элементы UI, включая таблицу для отображения данных о стримах,
+        а также настройка стилей и начальных значений.
+
+        Args:
+            root (tk.Tk): Основное окно приложения.
+        """
         self.root = root
         self.root.title("Stream Recorder")
         self.root.geometry("600x300")
-
         self.root.configure(bg="black")
 
         style = ttk.Style()
@@ -80,7 +106,6 @@ class StreamRecorderApp:
         self.tree.heading("Duration", text="Duration")
         self.tree.pack(fill=tk.BOTH, expand=True)
 
-        # Настройка столбцов: ширины и выравнивания
         self.tree.column("Streamer", width=100, anchor="center")
         self.tree.column("Start Time", width=100, anchor="center")
         self.tree.column("Duration", width=100, anchor="center")
@@ -90,16 +115,30 @@ class StreamRecorderApp:
         self.update_duration()
 
     def add_record(self, user_name):
+        """
+        Добавляет новый стрим в список активных стримов.
+
+        Эта функция создает новую запись в таблице, показывая имя стримера, время начала стрима
+        и продолжительность (начальная продолжительность — 0).
+
+        Args:
+            user_name (str): user_name стримера, трансляция которого была обнаружена.
+        """
         start_time = datetime.now()
         self.active_records[user_name] = {
             "start_time": start_time,
             "item_id": self.tree.insert("", "end", values=(user_name, start_time.strftime("%Y-%m-%d %H:%M:%S"), "0:00:00"))
         }
 
-        # Подбираем ширину столбцов
         self.resize_columns()
 
     def update_duration(self):
+        """
+        Обновляет продолжительность активных стримов.
+
+        Эта функция рассчитывает прошедшее время с момента начала каждого стрима и обновляет
+        информацию в таблице.
+        """
         for user_name, record in self.active_records.items():
             start_time = record["start_time"]
             elapsed_time = datetime.now() - start_time
@@ -112,27 +151,35 @@ class StreamRecorderApp:
         self.root.after(1000, self.update_duration)
 
     def remove_record(self, user_name):
+        """
+        Удаляет стрим из списка активных.
+
+        Эта функция удаляет запись о стриме из таблицы и очищает данные о нем
+        в словаре активных записей.
+
+        Args:
+            user_name (str): Имя стримера, чью запись необходимо удалить.
+        """
         if user_name in self.active_records:
             self.tree.delete(self.active_records[user_name]["item_id"])
-
             del self.active_records[user_name]
 
-            # Подбираем ширину столбцов
             self.resize_columns()
 
     def resize_columns(self):
-        """Автоматически изменяет ширину столбцов в зависимости от их содержимого."""
+        """
+        Автоматически изменяет ширину столбцов в зависимости от их содержимого.
+
+        Эта функция перебирает все строки и столбцы таблицы и находит максимальную длину текста
+        в каждом столбце. Затем ширина столбца устанавливается таким образом, чтобы вместить весь текст,
+        с минимальной шириной в 100 пикселей.
+        """
         for col in self.tree["columns"]:
             max_width = 0
-
-            # Пройти по всем строкам в столбце и найти максимальную длину текста
             for row in self.tree.get_children():
-
                 item_text = str(self.tree.item(row)["values"][self.tree["columns"].index(col)])
                 max_width = max(max_width, len(item_text))
 
-            # Установить ширину столбца в соответствии с максимальной длиной текста
-            # с учетом множителя для отступов
             self.tree.column(col, width=max(max_width * 10, 100))  # минимум 100 пикселей
 
 
@@ -233,6 +280,20 @@ def check_users(client_id, client_secret, token_container, user_ids):
 
 
 def loop_check_with_rate_limit(client_id, client_secret, token_container, storages, user_identifiers, app):
+    """
+    Бесконечный цикл для проверки активных пользователей и записи обнаруженных трансляций.
+
+    Эта функция периодически проверяет статус трансляций пользователей, и если трансляция активна,
+    запускает отдельный поток для записи трансляции.
+
+    Args:
+        client_id (str): Идентификатор клиента для API Twitch.
+        client_secret (str): Секрет клиента для API Twitch.
+        token_container (dict): Контейнер с токеном доступа для API Twitch.
+        storages (dict): Контейнер для хранения информации о хранилищах для записи.
+        user_identifiers (list): Список идентификаторов пользователей для проверки.
+        app (StreamRecorderApp): Приложение для записи и управления стримами.
+    """
     active_users = set()
 
     # Изначально получаем идентификаторы пользователей
