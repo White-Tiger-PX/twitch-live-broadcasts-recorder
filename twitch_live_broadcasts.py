@@ -227,14 +227,16 @@ def check_users(client_id, client_secret, token_container, user_ids):
 
         return active_streamers
     except requests.exceptions.HTTPError as e:
-        if e.response is not None and e.response.status_code == 401:
+        if hasattr(e, 'response') and e.response.status_code == 401:
+            logger.info("🔄 Токен устарел или неверный, обновление...")
+
             token_container["access_token"] = fetch_access_token(
                 client_id=client_id,
                 client_secret=client_secret,
                 logger=logger
             )
         else:
-            logger.error(f"Ошибка при проверки статуса пользователей: {e}")
+            logger.error(f"Ошибка при проверки статуса пользователей {user_ids}: {e}")
     except Exception as e:
         logger.error(f"Ошибка при проверки статуса пользователей: {e}")
 
@@ -295,45 +297,20 @@ def loop_check_with_rate_limit(client_id, client_secret, token_container, storag
             logger.error(f"Ошибка при проверке трансляции: {err}")
 
 
-def token_updater(client_id, client_secret, token_container, update_interval):
-    while True:
-        try:
-            token_container["access_token"] = fetch_access_token(
-                client_id=client_id,
-                client_secret=client_secret,
-                logger=logger
-            )
-        except Exception as err:
-            logger.error(f"Ошибка при обновлении токена: {err}")
-
-        time.sleep(update_interval)
-
-
 def main():
     root = tk.Tk()
     app = StreamRecorderApp(root)
 
     logger.info("Программа для записи трансляций запущена!")
 
-    init_database(
-        database_path=config.database_path,
-        main_logger=logger
-    )
+    init_database(database_path=config.database_path, main_logger=logger)
 
     client_id = config.client_id
     client_secret = config.client_secret
     user_identifiers = config.user_identifiers
     storages = config.storages
 
-    token_container = {
-        "access_token": None
-    }
-
-    threading.Thread(
-        target=token_updater,
-        args=(client_id, client_secret, token_container, 3600),
-        daemon=True
-    ).start()
+    token_container = {"access_token": None}
 
     # запускаем в отдельном потоке чтобы иметь возможность обновлять GUI
     threading.Thread(
