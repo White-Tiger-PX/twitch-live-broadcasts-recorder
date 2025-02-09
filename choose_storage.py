@@ -11,7 +11,8 @@ import psutil
 
 
 def choose_storage(storages, logger):
-    """Выбирает хранилище с достаточным количеством свободного места.
+    """
+    Выбирает хранилище с достаточным количеством свободного места.
 
     Функция проверяет доступные хранилища и выбирает первое, в которой свободного места
     достаточно для выполнения операции. В случае ошибки доступа или недостатка места
@@ -39,9 +40,9 @@ def choose_storage(storages, logger):
                 logger.error(f"Папка {folder_path} не найдена или недоступна: {err}")
             except OSError as err:
                 logger.error(f"Ошибка доступа или создания папки {folder_path}: {err}")
-    except Exception as err:
-        logger.error(f"Неизвестная ошибка при выборе папки: {err}")
 
-        raise
+        logger.warning("Хранилища с необходимым объёмом свободного места не найдено.")
+    except Exception as err:
+        logger.error(f"Неизвестная ошибка при выборе хранилища: {err}")
 
     return None

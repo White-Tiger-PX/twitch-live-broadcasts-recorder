@@ -10,8 +10,6 @@
 import os
 
 from choose_storage import choose_storage
-from fetch_access_token import fetch_access_token
-from get_twitch_user_id import get_twitch_user_id
 
 
 def create_file_basename(name_components, extension, logger):
@@ -30,11 +28,8 @@ def create_file_basename(name_components, extension, logger):
         Exception: Генерируется при ошибке создания имени файла.
     """
     try:
-        name_components = [str(item) for item in name_components]
-        raw_filename = f"{' - '.join(name_components)}.{extension}"
-        sanitized_filename = "".join(
-            char for char in raw_filename if char.isalnum() or char in [" ", "-", "_", "."]
-        )
+        raw_filename = f"{' - '.join(map(str, name_components))}.{extension}"
+        sanitized_filename = "".join(char for char in raw_filename if char.isalnum() or char in " -_.:")
 
         return sanitized_filename
     except Exception as err:
@@ -60,11 +55,13 @@ def create_file_path(folder_path, name_components, extension, logger):
         Exception: Генерируется при ошибке создания пути к файлу.
     """
     try:
-        basename = create_file_basename(name_components, extension, logger)
+        basename = create_file_basename(name_components=name_components, extension=extension, logger=logger)
         file_path = os.path.join(folder_path, basename)
+
         return os.path.normpath(file_path)
     except Exception as err:
         logger.error(f"Ошибка при создании пути к файлу: {err}")
+
         raise
 
 
@@ -87,6 +84,7 @@ def get_video_path(storages, user_name, name_components, logger):
         return None
 
     folder_path = os.path.join(storage_path, user_name)
+
     os.makedirs(folder_path, exist_ok=True)
 
     file_path = create_file_path(
@@ -97,45 +95,3 @@ def get_video_path(storages, user_name, name_components, logger):
     )
 
     return file_path
-
-
-def get_twitch_user_ids(client_id, client_secret, token_container, database_path, user_identifiers, logger):
-    """
-    Получает список идентификаторов пользователей Twitch по предоставленным идентификаторам или именам.
-
-    Args:
-        client_id (str): Идентификатор клиента Twitch.
-        client_secret (str): Секретный ключ для доступа к API Twitch.
-        token_container (dict): Контейнер с токеном доступа для API Twitch.
-        database_path (str): Путь к базе данных для поиска идентификаторов пользователей.
-        user_identifiers (list): Список идентификаторов или имен пользователей Twitch.
-        logger (Logger): Логгер.
-
-    Returns:
-        list: Список уникальных идентификаторов пользователей Twitch.
-    """
-    token_container["access_token"] = fetch_access_token(
-        client_id=client_id,
-        client_secret=client_secret,
-        logger=logger
-    )
-    headers = {"Client-ID": client_id, "Authorization": f"Bearer {token_container["access_token"]}"}
-    user_ids = set()
-
-    for user_identifier in user_identifiers:
-        if isinstance(user_identifier, int):
-            user_ids.add(str(user_identifier))
-        elif user_identifier.isdigit():
-            user_ids.add(str(user_identifier))
-        else:
-            user_id = get_twitch_user_id(
-                database_path=database_path,
-                user_name=user_identifier,
-                headers=headers,
-                main_logger=logger
-            )
-
-            if user_id:
-                user_ids.add(user_id)
-
-    return list(user_ids)
