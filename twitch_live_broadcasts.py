@@ -243,14 +243,13 @@ def record_twitch_channel(active_users, stream_data, storages, app):
 
 
 def check_users(client_id, client_secret, token_container, user_ids):
-    if not user_ids:
-        return []
-
     active_streamers = []
+
+    if not user_ids:
+        return active_streamers
 
     try:
         headers = {"Client-ID": client_id, "Authorization": f"Bearer {token_container["access_token"]}"}
-
         params = '&'.join([f'user_id={user_id}' for user_id in user_ids])
         r = requests.get(f"https://api.twitch.tv/helix/streams?{params}", headers=headers, timeout=15)
         r.raise_for_status()
@@ -275,7 +274,7 @@ def check_users(client_id, client_secret, token_container, user_ids):
     except Exception as e:
         logger.error(f"Ошибка при проверки статуса пользователей: {e}")
 
-    return []
+    return active_streamers
 
 
 def loop_check_with_rate_limit(client_id, client_secret, storages, user_ids, app):
