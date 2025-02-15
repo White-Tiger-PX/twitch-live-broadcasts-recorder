@@ -1,23 +1,19 @@
 """
-Модуль для получения access токена от Twitch с использованием client credentials.
-
-В этом модуле реализована функция `fetch_access_token`, которая отправляет запрос к
-API Twitch для получения токена доступа. Если запрос не удается, функция будет
-повторять попытку через 60 секунд, пока токен не будет успешно получен.
+Модуль для получения учётных данных от Twitch.
 
 Краткое описание функций:
-    - fetch_access_token: Получает access token для Twitch с использованием client credentials.
+- fetch_access_token: Получает учётные данные для Twitch.
 """
 import time
 import requests
 
 
 def fetch_access_token(client_id, client_secret, logger):
-    """Получает access token для Twitch с использованием client credentials.
+    """
+    Получает учётные данные для Twitch.
 
-    Функция делает запрос к API Twitch для получения access token, который используется
-    для дальнейших запросов. В случае ошибки при получении токена, функция будет
-    повторять попытку каждые 60 секунд.
+    Функция выполняет запрос к API Twitch для получения учётных данных.
+    Функция будет повторять попытку каждые 60 секунд до успешного получения токена.
 
     Args:
         client_id (str): Идентификатор клиента Twitch.
@@ -47,4 +43,4 @@ def fetch_access_token(client_id, client_secret, logger):
         except Exception as err:
             logger.error(f"Неизвестная ошибка в модуле fetch_access_token: {err}")
 
-            raise
+            return None
