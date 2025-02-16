@@ -16,8 +16,8 @@ from fetch_access_token import fetch_access_token
 from utils import get_video_path
 
 class RateLimiter:
-    def __init__(self, max_requests, period):
-        self.max_requests = max_requests
+    def __init__(self, period):
+        self.max_requests = 1
         self.period = period
         self.requests = []
         self.lock = threading.Lock()
@@ -105,9 +105,15 @@ class StreamRecorderApp:
         self.tree.heading("Duration", text="Duration")
         self.tree.pack(fill=tk.BOTH, expand=True)
 
-        self.tree.column("Streamer", width=75, anchor="center")
-        self.tree.column("Start Time", width=75, anchor="center")
-        self.tree.column("Duration", width=75, anchor="center")
+        self.min_column_widths = {
+            "Streamer": 100,
+            "Start Time": 150,
+            "Duration": 100
+        }
+
+        self.tree.column("Streamer", width=self.min_column_widths["Streamer"], anchor="center")
+        self.tree.column("Start Time", width=self.min_column_widths["Start Time"], anchor="center")
+        self.tree.column("Duration", width=self.min_column_widths["Duration"], anchor="center")
 
         self.active_records = {}
 
@@ -166,20 +172,25 @@ class StreamRecorderApp:
             self.resize_columns()
 
     def resize_columns(self):
-        """
-        Автоматически изменяет ширину столбцов в зависимости от их содержимого.
+        """Автоматически изменяет ширину столбцов в зависимости от их содержимого."""
+        column_widths = {}
 
-        Эта функция перебирает все строки и столбцы таблицы и находит максимальную длину текста
-        в каждом столбце. Затем ширина столбца устанавливается таким образом, чтобы вместить весь текст,
-        с минимальной установленной шириной.
-        """
         for col in self.tree["columns"]:
             max_width = 0
+
             for row in self.tree.get_children():
                 item_text = str(self.tree.item(row)["values"][self.tree["columns"].index(col)])
                 max_width = max(max_width, len(item_text))
 
-            self.tree.column(col, width=max(max_width * 10, 75))  # минимум 75 пикселей
+            min_width = self.min_column_widths.get(col, 100)
+            column_widths[col] = max(max_width * 10, min_width)
+
+        def apply_column_widths():
+            for col, width in column_widths.items():
+                self.tree.column(col, width=width)
+
+        # Отложить применение ширины столбцов
+        self.tree.after(0, apply_column_widths)
 
 
 def add_record_to_db(stream_data, recording_start):
@@ -212,7 +223,7 @@ def add_record_to_db(stream_data, recording_start):
 def record_twitch_channel(active_users, stream_data, storages, app):
     try:
         user_name = stream_data['user_name']
-        user_id = stream_data['user_id']
+        user_id   = stream_data['user_id']
         stream_id = stream_data['id']
 
         video_label = f"[ {user_name} - {stream_id} ]"
@@ -223,10 +234,10 @@ def record_twitch_channel(active_users, stream_data, storages, app):
         name_components = [recording_start, 'broadcast', user_name, stream_id]
 
         recorded_file_path = get_video_path(
-            storages=storages,
-            user_name=user_name,
-            name_components=name_components,
-            logger=logger
+            storages        = storages,
+            user_name       = user_name,
+            name_components = name_components,
+            logger          = logger
         )
 
         logger.info(f"Запись стрима пользователя {video_label} началась.")
@@ -242,14 +253,14 @@ def record_twitch_channel(active_users, stream_data, storages, app):
         active_users.discard(user_id)
 
 
-def check_users(client_id, client_secret, token_container, user_ids):
+def check_users(token_container, user_ids):
     active_streamers = []
 
     if not user_ids:
         return active_streamers
 
     try:
-        headers = {"Client-ID": client_id, "Authorization": f"Bearer {token_container["access_token"]}"}
+        headers = {"Client-ID": config.client_id, "Authorization": f"Bearer {token_container["access_token"]}"}
         params = '&'.join([f'user_id={user_id}' for user_id in user_ids])
         r = requests.get(f"https://api.twitch.tv/helix/streams?{params}", headers=headers, timeout=15)
         r.raise_for_status()
@@ -265,9 +276,9 @@ def check_users(client_id, client_secret, token_container, user_ids):
             logger.info("🔄 Токен устарел или неверный, обновление...")
 
             token_container["access_token"] = fetch_access_token(
-                client_id=client_id,
-                client_secret=client_secret,
-                logger=logger
+                client_id     = config.client_id,
+                client_secret = config.client_secret,
+                logger        = logger
             )
         else:
             logger.error(f"Ошибка при проверки статуса пользователей {user_ids}: {e}")
@@ -277,7 +288,7 @@ def check_users(client_id, client_secret, token_container, user_ids):
     return active_streamers
 
 
-def loop_check_with_rate_limit(client_id, client_secret, storages, user_ids, app):
+def loop_check_with_rate_limit(user_ids, storages, app):
     """
     Бесконечный цикл для проверки активных пользователей и записи обнаруженных трансляций.
 
@@ -285,10 +296,8 @@ def loop_check_with_rate_limit(client_id, client_secret, storages, user_ids, app
     запускает отдельный поток для записи трансляции.
 
     Args:
-        client_id (str): Идентификатор клиента для API Twitch.
-        client_secret (str): Секрет клиента для API Twitch.
-        storages (dict): Контейнер для хранения информации о хранилищах для записи.
         user_identifiers (list): Список идентификаторов пользователей для проверки.
+        storages (dict): Контейнер для хранения информации о хранилищах для записи.
         app (StreamRecorderApp): Приложение для записи и управления стримами.
     """
     token_container = {"access_token": None}
@@ -305,14 +314,12 @@ def loop_check_with_rate_limit(client_id, client_secret, storages, user_ids, app
             ]
 
             streams_data = check_users(
-                client_id=client_id,
-                client_secret=client_secret,
                 token_container=token_container,
                 user_ids=user_ids_for_check
             )
 
             for stream_data in streams_data:
-                recording_thread_name = f"twitch_live_broadcasts_thread_{stream_data['user_name']}"
+                recording_thread_name = f"thread_{stream_data['user_name']}"
                 recording_thread = threading.Thread(
                     target=record_twitch_channel,
                     args=(
@@ -339,15 +346,13 @@ def main():
 
     init_database(database_path=config.database_path, main_logger=logger)
 
-    client_id = config.client_id
-    client_secret = config.client_secret
     user_ids = config.user_ids
     storages = config.storages
 
     # запускаем в отдельном потоке чтобы иметь возможность обновлять GUI
     threading.Thread(
         target=loop_check_with_rate_limit,
-        args=(client_id, client_secret, storages, user_ids, app),
+        args=(user_ids, storages, app),
         daemon=True
     ).start()
 
@@ -356,6 +361,6 @@ def main():
 
 if __name__ == "__main__":
     logger = set_logger(log_folder=config.log_folder)
-    limiter = RateLimiter(max_requests=1, period=5)
+    limiter = RateLimiter(period=5)
 
     main()

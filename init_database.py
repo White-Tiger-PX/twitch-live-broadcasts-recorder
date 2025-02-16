@@ -5,7 +5,7 @@
 хранения данных о трансляциях и маппинга имен пользователей Twitch на их идентификаторы.
 
 Краткое описание функций:
-    - init_database: Инициализирует базу данных, создавая необходимые таблицы, если они не существуют.
+- init_database: Инициализирует базу данных, создавая необходимые таблицы, если они не существуют.
 """
 import sqlite3
 
@@ -14,7 +14,7 @@ import config
 from set_logger import set_logger
 
 
-def init_database(database_path, main_logger):
+def init_database(database_path: str, main_logger):
     """Инициализирует базу данных и создает необходимые таблицы.
 
     Args:
@@ -54,7 +54,4 @@ def init_database(database_path, main_logger):
 if __name__ == "__main__":
     logger = set_logger(log_folder=config.log_folder)
 
-    init_database(
-        database_path=config.database_path,
-        main_logger=logger
-    )
+    init_database(database_path=config.database_path, main_logger=logger)
