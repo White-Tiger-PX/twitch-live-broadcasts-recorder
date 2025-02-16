@@ -189,7 +189,6 @@ class StreamRecorderApp:
             for col, width in column_widths.items():
                 self.tree.column(col, width=width)
 
-        # Отложить применение ширины столбцов
         self.tree.after(0, apply_column_widths)
 
 
@@ -231,7 +230,7 @@ def record_twitch_channel(active_users, stream_data, storages, app):
         active_users.add(user_id)
 
         recording_start = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
-        name_components = [recording_start, 'broadcast', user_name, stream_id]
+        name_components = [recording_start, stream_id, 'broadcast', user_name]
 
         recorded_file_path = get_video_path(
             storages        = storages,
@@ -349,7 +348,6 @@ def main():
     user_ids = config.user_ids
     storages = config.storages
 
-    # запускаем в отдельном потоке чтобы иметь возможность обновлять GUI
     threading.Thread(
         target=loop_check_with_rate_limit,
         args=(user_ids, storages, app),
