@@ -7,6 +7,7 @@
 Краткое описание функций:
     - choose_storage: Выбирает хранилище с достаточным количеством свободного места.
 """
+import os
 import psutil
 
 
@@ -14,13 +15,9 @@ def choose_storage(storages, logger):
     """
     Выбирает хранилище с достаточным количеством свободного места.
 
-    Функция проверяет доступные хранилища и выбирает первое, в которой свободного места
-    достаточно для выполнения операции. В случае ошибки доступа или недостатка места
-    функция пытается повторить проверку через 10 минут.
-
     Args:
         storages (list): Список словарей, каждый из которых представляет хранилище с
-                         путём и требуемым количеством свободного места.
+                         директорией и требуемым количеством свободного места.
         logger (logging.Logger): Логгер.
 
     Returns:
@@ -31,15 +28,20 @@ def choose_storage(storages, logger):
             folder_path = storage['path']
             required_free_space_gb = storage['required_free_space_gb']
 
+            root_path = os.path.splitdrive(folder_path)[0] + "/"
+
+            if not os.path.exists(root_path):
+                logger.error(f"Диск для {folder_path} не найден или недоступен.")
+
+                continue
+
             try:
-                disk_usage = psutil.disk_usage(folder_path)
+                disk_usage = psutil.disk_usage(root_path)
 
                 if disk_usage.free >= required_free_space_gb * (1024 ** 3):
                     return folder_path
-            except FileNotFoundError as err:
-                logger.error(f"Папка {folder_path} не найдена или недоступна: {err}")
             except OSError as err:
-                logger.error(f"Ошибка доступа или создания папки {folder_path}: {err}")
+                logger.error(f"Ошибка доступа к диску {root_path}: {err}")
 
         logger.warning("Хранилища с необходимым объёмом свободного места не найдено.")
     except Exception as err:
