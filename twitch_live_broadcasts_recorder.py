@@ -5,7 +5,7 @@ import threading
 import tkinter as tk
 
 from tkinter import ttk
-from datetime import datetime
+from datetime import datetime, timezone
 
 import config
 
@@ -108,7 +108,7 @@ class StreamRecorderApp:
         self.min_column_widths = {
             "Streamer": 100,
             "Start Time": 150,
-            "Duration": 100
+            "Duration": 75
         }
 
         self.tree.column("Streamer", width=self.min_column_widths["Streamer"], anchor="center")
@@ -229,7 +229,7 @@ def record_twitch_channel(active_users, stream_data, storages, app):
 
         active_users.add(user_id)
 
-        recording_start = datetime.now().strftime('%Y-%m-%d %H-%M-%S')
+        recording_start = datetime.now(timezone.utc).strftime('%Y-%m-%d %H-%M-%S')
         name_components = [recording_start, stream_id, 'broadcast', user_name]
 
         recorded_file_path = get_video_path(
@@ -312,10 +312,7 @@ def loop_check_with_rate_limit(user_ids, storages, app):
                 if user_id not in active_users
             ]
 
-            streams_data = check_users(
-                token_container=token_container,
-                user_ids=user_ids_for_check
-            )
+            streams_data = check_users(token_container=token_container, user_ids=user_ids_for_check)
 
             for stream_data in streams_data:
                 recording_thread_name = f"thread_{stream_data['user_name']}"
